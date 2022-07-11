@@ -1,0 +1,7 @@
+websocket==1.3.2
+json
+threading
+python-dotenv
+sqlalchemy
+abc
+time
