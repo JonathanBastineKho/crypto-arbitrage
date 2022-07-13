@@ -1,6 +1,7 @@
 from sqlalchemy import ForeignKey, orm
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm import sessionmaker
 import sqlalchemy as sa
 from dotenv import load_dotenv
 import os
