@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1">
+  <title>{{ title }}</title>
+  <link href="{{ url_for('static', filename='css/base.css') }}" rel="stylesheet" type="text/css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  {% block head %}{% endblock head %}
+</head>
+<body>
+  {% block body %}{% endblock body %}
+</body>
+</html>
