@@ -3,7 +3,8 @@ from abc import abstractmethod
 import json
 import threading
 import time
-from db import *
+from core import session
+from core.db import Markets, Coins, Price
 
 # ------------- Exchange Class -----------------
 

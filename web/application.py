@@ -1,3 +1,3 @@
-from app import app
+from app import socketio, app
 
-app.run(host='0.0.0.0', port=5000, debug=True)
+socketio.run(app, debug=True)
