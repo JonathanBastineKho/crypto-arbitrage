@@ -7,3 +7,4 @@ abc
 time
 gevent-websocket
 flask_socketio
+simple-websocket

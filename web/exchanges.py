@@ -3,8 +3,8 @@ from abc import abstractmethod
 import json
 import threading
 import time
-from core import session
-from core.db import Markets, Coins, Price
+from web import session
+from web.db import Markets, Coins, Price
 
 # ------------- Exchange Class -----------------
 
@@ -100,6 +100,7 @@ class CryptoCom(Exchange):
 # ------------- Create all MarketPlace Instance -----------------
 # base.metadata.create_all() # if database hasn't been created yet
 
-def get_all_data():
-    for cls in Exchange.__subclasses__():
-        cls()
+class CoreData:
+    def __init__(self) -> None:
+        for cls in Exchange.__subclasses__():
+            cls()

@@ -1,4 +1,5 @@
-from core import *
+from web import base, sa
+from sqlalchemy import ForeignKey, orm
 
 class Coins(base):
     __tablename__ = "CoinList"
@@ -19,3 +20,7 @@ class Price(base):
     market_id = sa.Column(sa.Integer, ForeignKey('MarketList.id'))
     bid = sa.Column(sa.Float, nullable=False)
     ask = sa.Column(sa.Float, nullable=False)
+
+
+
+        
