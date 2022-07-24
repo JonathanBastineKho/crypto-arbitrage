@@ -1,4 +1,4 @@
-from web import app, socketio
+from web import app, socketio, core_data
 from flask import render_template
 import time
 
@@ -8,9 +8,17 @@ def index():
 
 def background_thread():
     while True:
-        socketio.emit('my_response', {"data": "test"})
-        time.sleep(0.05)
+        prices = core_data.get_all_data()
+        for i in range(len(prices)):
+            data = {
+                "coin" : prices[i].coin.name,
+                "market" : prices[i].market.name,
+                "bid" : prices[i].bid,
+                "ask" : prices[i].ask,
+            }
+            socketio.emit('my_response', data)
+        time.sleep(0.1)
 
 @socketio.on('connect')
-def handle_conection():
+def handle_connection():
     socketio.start_background_task(background_thread)

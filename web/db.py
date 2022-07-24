@@ -1,25 +1,26 @@
-from web import base, sa
-from sqlalchemy import ForeignKey, orm
+from web import db
 
-class Coins(base):
+class Coins(db.Model):
     __tablename__ = "CoinList"
-    id = sa.Column(sa.Integer, primary_key=True)
-    name = sa.Column(sa.String(250), nullable=False)
-    price = orm.relationship("Price", uselist=False)
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(250), nullable=False)
+    price = db.relationship("Price", back_populates="coin")
 
-class Markets(base):
+class Markets(db.Model):
     __tablename__ = "MarketList"
-    id = sa.Column(sa.Integer, primary_key=True)
-    name = sa.Column(sa.String(250), nullable=False)
-    price = orm.relationship("Price", uselist=False)
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(250), nullable=False)
+    price = db.relationship("Price", back_populates="market")
 
-class Price(base):
+class Price(db.Model):
     __tablename__ = "PriceList"
-    id = sa.Column(sa.Integer, primary_key=True)
-    coin_id = sa.Column(sa.Integer, ForeignKey('CoinList.id'))
-    market_id = sa.Column(sa.Integer, ForeignKey('MarketList.id'))
-    bid = sa.Column(sa.Float, nullable=False)
-    ask = sa.Column(sa.Float, nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    coin = db.relationship("Coins", back_populates="price")
+    coin_id = db.Column(db.Integer, db.ForeignKey('CoinList.id'))
+    market = db.relationship("Markets", back_populates="price")
+    market_id = db.Column(db.Integer, db.ForeignKey('MarketList.id'))
+    bid = db.Column(db.Float, nullable=False)
+    ask = db.Column(db.Float, nullable=False)
 
 
 

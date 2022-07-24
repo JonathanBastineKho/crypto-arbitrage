@@ -1,9 +1,10 @@
 from websocket import WebSocketApp
 from abc import abstractmethod
+from sqlalchemy_utils import database_exists
 import json
 import threading
 import time
-from web import session
+from web import DATABASE_URL, db
 from web.db import Markets, Coins, Price
 
 # ------------- Exchange Class -----------------
@@ -26,11 +27,11 @@ class Exchange(WebSocketApp):
         if self.request != None:
             time.sleep(1)
             self.send(json.dumps(self.request))
-        with session() as initial_session:
-            self.market = initial_session.query(Markets).filter_by(name=self.market_name).first()
-            if self.market == None:
-                initial_session.add(Markets(name=self.market_name))
-                initial_session.commit()
+
+        self.market = Markets.query.filter_by(name=self.market_name).first()
+        if self.market == None:
+            db.session.add(Markets(name=self.market_name))
+            db.session.commit()
             
     @abstractmethod
     def on_messagefcn(self, message):
@@ -53,19 +54,18 @@ class Binance(Exchange):
         
     def on_messagefcn(self, message):
         data = json.loads(message)
-        with session() as data_session:
-            coin = data_session.query(Coins).filter_by(name=data["s"]).first()
-            if coin != None:
-                price = data_session.query(Price).filter_by(coin_id=coin.id, market_id=self.market.id).first()
-                if price != None:
-                    price.bid = data["b"]
-                    price.ask = data["a"]
-                else:
-                    data_session.add(Price(coin_id=coin.id, market_id=self.market.id, bid=data["b"], ask=data["a"]))
+        coin = Coins.query.filter_by(name=data["s"]).first()
+        if coin != None:
+            price = Price.query.filter_by(coin_id=coin.id, market_id=self.market.id).first()
+            if price != None:
+                price.bid = data["b"]
+                price.ask = data["a"]
             else:
-                data_session.add(Coins(name=data["s"]))
-            
-            data_session.commit()
+                db.session.add(Price(coin_id=coin.id, market_id=self.market.id, bid=data["b"], ask=data["a"]))
+        else:
+            db.session.add(Coins(name=data["s"]))
+        
+        db.session.commit()
 
 class CryptoCom(Exchange):
     def __init__(self):
@@ -80,27 +80,31 @@ class CryptoCom(Exchange):
 
     def on_messagefcn(self, message):
         data = json.loads(message)
-        with session() as data_session:
-            instrument_name = data["result"]["instrument_name"].replace("_", "")
-            coin = data_session.query(Coins).filter_by(name=instrument_name).first()
-            if coin != None:
-                price = data_session.query(Price).filter_by(coin_id=coin.id, market_id = self.market.id).first()
-                if price != None:
-                    price.bid = data["result"]["data"][0]["b"]
-                    price.ask = data["result"]["data"][0]["k"]
-                else:
-                    data_session.add(Price(coin_id=coin.id,
-                                     market_id=self.market.id,
-                                     bid=data["result"]["data"][0]["b"],
-                                     ask=data["result"]["data"][0]["k"]))
+        instrument_name = data["result"]["instrument_name"].replace("_", "")
+        coin = Coins.query.filter_by(name=instrument_name).first()
+        if coin != None:
+            price = Price.query.filter_by(coin_id=coin.id, market_id = self.market.id).first()
+            if price != None:
+                price.bid = data["result"]["data"][0]["b"]
+                price.ask = data["result"]["data"][0]["k"]
             else:
-                data_session.add(Coins(name=instrument_name))
-            data_session.commit()
+                db.session.add(Price(coin_id=coin.id,
+                                    market_id=self.market.id,
+                                    bid=data["result"]["data"][0]["b"],
+                                    ask=data["result"]["data"][0]["k"]))
+        else:
+            db.session.add(Coins(name=instrument_name))
+        db.session.commit()
 
 # ------------- Create all MarketPlace Instance -----------------
 # base.metadata.create_all() # if database hasn't been created yet
 
 class CoreData:
     def __init__(self) -> None:
+        if not database_exists(DATABASE_URL):
+            db.create_all()
         for cls in Exchange.__subclasses__():
             cls()
+    def get_all_data(self):
+        all_price = Price.query.all()
+        return all_price
