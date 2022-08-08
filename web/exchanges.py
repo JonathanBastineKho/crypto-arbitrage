@@ -97,7 +97,6 @@ class CryptoCom(Exchange):
         db.session.commit()
 
 # ------------- Create all MarketPlace Instance -----------------
-# base.metadata.create_all() # if database hasn't been created yet
 
 class CoreData:
     def __init__(self) -> None:
@@ -108,3 +107,26 @@ class CoreData:
     def get_all_data(self):
         all_price = Price.query.all()
         return all_price
+    
+    def get_all_potential_arbitrage(self, percentage_diff=0.05):
+        data = []
+        for coin in Coins.query.all():
+            price_value = []
+            for market in Markets.query.all():
+                price = Price.query.filter_by(coin_id=coin.id, market_id=market.id).first()
+                if price != None:
+                    price_value.append({"market_id": price.market.id, "price_sell": price.bid, "price_buy": price.ask})
+            # Find the most price difference
+            buy_price = min([price["price_buy"] for price in price_value], default=-1)
+            sell_price = max([price["price_sell"] for price in price_value], default=-1)
+            if sell_price <= buy_price or sell_price < buy_price*(1+percentage_diff):
+                continue
+            dict = {"coin_id": coin.id, "buy_at" : [], "sell_at" : []}
+            for price in price_value:
+                if price["price_buy"] == buy_price:
+                    dict["buy_at"].append({"market_id" : price["market_id"], "price" : price["price_buy"]})
+                if price["price_sell"] == sell_price:
+                    dict["sell_at"].append({"market_id" : price["market_id"], "price" : price["price_sell"]})
+
+            data.append(dict)
+        return data

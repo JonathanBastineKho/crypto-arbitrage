@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block head %}
+<link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet" type="text/css">
+{% endblock head %}
+
+{% block body %}
+
+{% for data in datas %}
+    <h6>{{data}}</h6>
+{% endfor %}
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+{% endblock body %}
+
+

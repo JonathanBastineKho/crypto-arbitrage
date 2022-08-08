@@ -6,6 +6,11 @@ import time
 def index():
     return render_template("index.html")
 
+@app.route("/get-potential-arbitrage")
+def potential_arbitrage():
+    data = core_data.get_all_potential_arbitrage()
+    return render_template("arbitrage.html", datas=data)
+
 def background_thread():
     while True:
         prices = core_data.get_all_data()
