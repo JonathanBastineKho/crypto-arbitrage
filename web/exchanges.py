@@ -5,7 +5,7 @@ import json
 import threading
 import time
 from web import DATABASE_URL, db
-from web.db import Markets, Coins, Price
+from web.db import Markets, Coins, Price, PerpetualPrice
 
 # ------------- Exchange Class -----------------
 
@@ -94,6 +94,29 @@ class CryptoCom(Exchange):
                                     ask=data["result"]["data"][0]["k"]))
         else:
             db.session.add(Coins(name=instrument_name))
+        db.session.commit()
+
+class BinanceFutures(Exchange):
+    def __init__(self):
+        super().__init__("binance_futures", "wss://fstream.binance.com/ws/!markPrice@arr@1s")
+    
+    def on_messagefcn(self, message):
+        data = json.loads(message)
+        print(len(data))
+        for i in range(len(data)):
+            coin = Coins.query.filter_by(name=data[i]['s']).first()
+            if coin != None:
+                price = PerpetualPrice.query.filter_by(coin_id=coin.id, market_id=self.market.id).first()
+                if price != None:
+                    price.price = float(data[i]['p'])
+                    price.funding_rate = float(data[i]['r'])
+                else:
+                    db.session.add(PerpetualPrice(coin_id=coin.id,
+                                                  market_id=self.market.id,
+                                                  price=float(data[i]['p']),
+                                                  funding_rate=float(data[i]['r'])))
+            else:
+                db.session.add(Coins(name=data[i]['s']))
         db.session.commit()
 
 # ------------- Create all MarketPlace Instance -----------------
