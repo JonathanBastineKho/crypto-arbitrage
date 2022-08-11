@@ -10,12 +10,11 @@ from web.db import Markets, Coins, Price, PerpetualPrice
 # ------------- Exchange Class -----------------
 
 class Exchange(WebSocketApp):
-    def __init__(self, market_name, market_stream, request=None):
+    def __init__(self, market_name, market_stream):
         self.socket_message = None
         self.market_name = market_name
-        self.request = request
         self.market_stream = market_stream
-        self.market = None
+        self.market = Markets.query.filter_by(name=self.market_name).first()
         super().__init__(self.market_stream,
                          on_open= lambda self : self.on_openfcn(),
                          on_message= lambda self, message : self.on_messagefcn(message),
@@ -24,15 +23,13 @@ class Exchange(WebSocketApp):
                         )
         exchange_socket = threading.Thread(target=self.run_forever)
         exchange_socket.start()
-        if self.request != None:
-            time.sleep(1)
-            self.send(json.dumps(self.request))
 
-        self.market = Markets.query.filter_by(name=self.market_name).first()
         if self.market == None:
-            db.session.add(Markets(name=self.market_name))
+            new_market = Markets(name=self.market_name)
+            db.session.add(new_market)
             db.session.commit()
-            
+            self.market = new_market
+
     @abstractmethod
     def on_messagefcn(self, message):
         pass
@@ -76,7 +73,9 @@ class CryptoCom(Exchange):
                 "channels": ["ticker"]
             },
         }
-        super().__init__("crypto_com", "wss://stream.crypto.com/v2/market", request)
+        super().__init__("crypto_com", "wss://stream.crypto.com/v2/market")
+        time.sleep(1)
+        self.send(json.dumps(request))
 
     def on_messagefcn(self, message):
         data = json.loads(message)
@@ -102,7 +101,6 @@ class BinanceFutures(Exchange):
     
     def on_messagefcn(self, message):
         data = json.loads(message)
-        print(len(data))
         for i in range(len(data)):
             coin = Coins.query.filter_by(name=data[i]['s']).first()
             if coin != None:
@@ -127,10 +125,26 @@ class CoreData:
             db.create_all()
         for cls in Exchange.__subclasses__():
             cls()
-    def get_all_data(self):
+    def get_all_spot_data(self):
         all_price = Price.query.all()
         return all_price
+
+    def get_all_futures_data(self):
+        return PerpetualPrice.query.all()
     
+    def get_all_data(self):
+        all_price = Price.query.all()
+        all_futures_data = PerpetualPrice.query.all()
+        return all_price, all_futures_data
+    
+    def search_spot_data(self, coin_name:str):
+        # Coin Search
+        coin = Coins.query.filter_by(name=coin_name).first()
+        if coin != None:
+            spot = Price.query.filter_by(coin_id=coin.id).first()
+            return spot
+        return None
+
     def get_all_potential_arbitrage(self, percentage_diff=0.05):
         data = []
         for coin in Coins.query.all():

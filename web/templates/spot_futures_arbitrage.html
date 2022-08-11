@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block head %}
+<link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet" type="text/css">
+{% endblock head %}
+
+{% block body %}
+
+<table id="main_table">
+    <colgroup>
+        <col class="coin">
+        <col class="futures_price">
+        <col class="spot_price">
+        <col class="futures_market">
+        <col class="spot_market">
+        <col class="funding_rate">
+    </colgroup>
+    <tr>
+        <th scope="col">coin</th>
+        <th scope="col">futures price</th>
+        <th scope="col">spot price</th>
+        <th scope="col">futures market</th>
+        <th scope="col">spot market</th>
+        <th scope="col">funding rate</th>
+    </tr>
+</table>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='js/spot_futures.js') }}"></script>
+{% endblock body %}
+
+

@@ -3,7 +3,7 @@ socket.on('connect', function() {
     console.log("connection established");
 });
 
-socket.on('my_response', function(data){
+socket.on('spot_data', function(data){
     var found = false;
     var table = document.getElementById('main_table');
     var tr = table.getElementsByTagName("tr");
