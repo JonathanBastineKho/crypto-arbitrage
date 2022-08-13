@@ -5,3 +5,8 @@ python-dotenv
 sqlalchemy
 abc
 time
+gevent-websocket
+flask_socketio
+simple-websocket
+sqlalchemy-utils
+Flask-Bootstrap4
