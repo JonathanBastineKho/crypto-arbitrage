@@ -10,16 +10,16 @@ from web.db import Markets, Coins, Price, PerpetualPrice
 # ------------- Exchange Class -----------------
 
 class Exchange(WebSocketApp):
+    socket_message = None
     def __init__(self, market_name, market_stream):
-        self.socket_message = None
         self.market_name = market_name
         self.market_stream = market_stream
         self.market = Markets.query.filter_by(name=self.market_name).first()
         super().__init__(self.market_stream,
-                         on_open= lambda self : self.on_openfcn(),
-                         on_message= lambda self, message : self.on_messagefcn(message),
-                         on_error= lambda self, error : self.on_errorfcn(error),
-                         on_close= lambda self : self.on_closefcn()
+                         on_open= lambda self : self._on_openfcn(),
+                         on_message= lambda self, message : self._on_messagefcn(message),
+                         on_error= lambda self, error : self._on_errorfcn(error),
+                         on_close= lambda self : self._on_closefcn()
                         )
         exchange_socket = threading.Thread(target=self.run_forever)
         exchange_socket.start()
@@ -31,17 +31,20 @@ class Exchange(WebSocketApp):
             self.market = new_market
 
     @abstractmethod
-    def on_messagefcn(self, message):
+    def _on_messagefcn(self, message):
         pass
 
-    def on_errorfcn(self, error):
-        self.socket_message = error
+    @staticmethod
+    def _on_errorfcn(error):
+        socket_message = error
 
-    def on_closefcn(self):
-        self.socket_message = "Error"
+    @staticmethod
+    def _on_closefcn():
+        socket_message = "Error"
 
-    def on_openfcn(self):
-        self.socket_message = "connection opened"
+    @staticmethod
+    def _on_openfcn():
+        socket_message = "connection opened"
 
 # All available MarketPlace
 
@@ -49,7 +52,7 @@ class Binance(Exchange):
     def __init__(self):
         super().__init__("binance", "wss://stream.binance.com:9443/ws/!bookTicker")
         
-    def on_messagefcn(self, message):
+    def _on_messagefcn(self, message):
         data = json.loads(message)
         coin = Coins.query.filter_by(name=data["s"]).first()
         if coin != None:
@@ -77,7 +80,7 @@ class CryptoCom(Exchange):
         time.sleep(1)
         self.send(json.dumps(request))
 
-    def on_messagefcn(self, message):
+    def _on_messagefcn(self, message):
         data = json.loads(message)
         instrument_name = data["result"]["instrument_name"].replace("_", "")
         coin = Coins.query.filter_by(name=instrument_name).first()
@@ -99,7 +102,7 @@ class BinanceFutures(Exchange):
     def __init__(self):
         super().__init__("binance_futures", "wss://fstream.binance.com/ws/!markPrice@arr@1s")
     
-    def on_messagefcn(self, message):
+    def _on_messagefcn(self, message):
         data = json.loads(message)
         for i in range(len(data)):
             coin = Coins.query.filter_by(name=data[i]['s']).first()
@@ -117,7 +120,7 @@ class BinanceFutures(Exchange):
                 db.session.add(Coins(name=data[i]['s']))
         db.session.commit()
 
-# ------------- Create all MarketPlace Instance -----------------
+# ------------- Core Data Class -----------------
 
 class CoreData:
     def __init__(self) -> None:
