@@ -1,6 +1,6 @@
 tempCodeRunnerFile.py
 .env
 market_place.db
-market_place.db-journal
 __pycache__
-test.py
+market_place.db-journal
+web/test.py
