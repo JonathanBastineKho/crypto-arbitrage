@@ -1,3 +1,3 @@
 from web import socketio, app
 
-socketio.run(app, debug=True)
+socketio.run(app, use_reloader=False)
