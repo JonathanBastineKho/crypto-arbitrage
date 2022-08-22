@@ -1,4 +1,6 @@
-var main_table = $('#main_table').DataTable();
+var main_table = $('#main_table').DataTable({
+    "responsive" : true
+});
 var socket = io();
 socket.on('connect', function() {
     console.log("connection established");
