@@ -21,5 +21,4 @@ socketio = SocketIO(app, async_mode="threading")
 
 from web.exchanges import CoreData
 core_data = CoreData()
-if core_data.status == "online":
-    from web import routes
+from web import routes

@@ -150,22 +150,21 @@ class BinanceFutures(Exchange, FuturesMixin):
 
 class CoreData:
     def __init__(self) -> None:
-        print("called")
         self.status = "online"
         if not database_exists(DATABASE_URL.replace("../", "")):
             datab.create_all()
-            print("Database has just been created, Try running the app again")
+            print("Database has just been created")
             self.status = "restart"
-            try:
-                self._initialize()
-            except:
-                os._exit(0)
-        else:
-            self._initialize()
+        
+        self._initialize()
 
     def _initialize(self):
-        for cls in Exchange.__subclasses__():
-            cls()
+        try:
+            for cls in Exchange.__subclasses__():
+                cls()
+        except:
+            print("try running the app again")
+            os._exit(0)
 
     def get_all_spot_data(self, sess):
         all_price = sess.query(Price).all()
