@@ -1,5 +1,4 @@
-from socket import socket
-from web import app, socketio, core_data, BINANCE_API_KEY, BINANCE_PRIVATE_KEY
+from web import app, socketio, core_data, BINANCE_API_KEY, BINANCE_PRIVATE_KEY, datab
 from flask import render_template, jsonify
 import time
 import hmac
@@ -16,9 +15,10 @@ def potential_arbitrage():
     return render_template("spot_futures_arbitrage.html", title="Spot - Futures Arbitrage", _get_balance=jsonify({"test":"test"}))
 
 def background_thread():
+    sess = datab.session()
     while True:
-        prices = core_data.get_all_spot_data()
-        futures = core_data.get_all_futures_data()
+        prices = core_data.get_all_spot_data(sess=sess)
+        futures = core_data.get_all_futures_data(sess=sess)
         for i in range(len(prices)):
             data = {
                 "coin" : prices[i].coin.name,
@@ -29,7 +29,7 @@ def background_thread():
             socketio.emit('spot_data', data)
         for ft_price in futures:
             coin_name = ft_price.coin.name
-            spot = core_data.search_spot_data(coin_name=coin_name)
+            spot = core_data.search_spot_data(coin_name=coin_name,  sess=sess)
             if spot != None:
                 data = {
                     "coin" : coin_name,
@@ -61,7 +61,7 @@ def balance_sync_background():
             value = 0 if not response.text.isdigit() else int(response.text)
             user_asset[asset] = value
         socketio.emit('user_balance', user_asset)
-        time.sleep(5)
+        time.sleep(15)
 
 @socketio.on('connect')
 def handle_connection():
