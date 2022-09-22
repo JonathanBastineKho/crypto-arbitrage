@@ -9,17 +9,17 @@ socket.on('connect', function() {
 socket.on('spot_data', function(data){
     // Search coin
     var row = main_table.row(function(idx, rowdata, node){
-        return rowdata[0] == data['coin'] ? true : false;
+        return rowdata[0] == data['coin'] && rowdata[1] == data["market"] ? true : false;
     });
     // Check if coin available
     if(typeof row.data() == 'undefined'){
         main_table.row.add(
             [data['coin'], data['market'], 
             data['bid'], data['ask']]
-            ).draw();
+            ).draw(false);
     } else {
         row.data()[2] = data['bid'];
         row.data()[3] = data['ask'];
-        row.data(row.data()).draw();
+        row.data(row.data()).draw(false);
     }
 });

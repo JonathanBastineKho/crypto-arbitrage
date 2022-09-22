@@ -5,6 +5,8 @@ import hmac
 import requests
 import hashlib
 from urllib.parse import urlencode
+from sqlalchemy.event.api import listen
+from web.db import Price, PerpetualPrice
 
 @app.route("/")
 def index():
@@ -37,10 +39,45 @@ def background_thread():
                     "spot_price" : spot.ask,
                     "futures_market" : ft_price.market.name,
                     "spot_market" : spot.market.name,
-                    "funding_rate" : ft_price.funding_rate
+                    "funding_rate" : ft_price.funding_rate,
                 }
                 socketio.emit('arbitrage_data', data)
         time.sleep(0.1)
+def spot_price_emission(mapper, connection, target):
+    try:
+        data = {
+            "coin" : target.coin.name,
+            "market" : target.market.name,
+            "bid" : target.bid,
+            "ask" : target.ask
+        }
+        socketio.emit('spot_data', data)
+    except AttributeError:
+        pass
+
+def futures_price_emission(mapper, connection, target):
+    try:
+        spot_prices = core_data.search_spot_data(target.coin.name)
+        for price in spot_prices:
+            data = {
+                "coin" : target.coin.name,
+                "futures_price" : target.price,
+                "futures_market" : target.market.name,
+                "funding_rate" : target.funding_rate,
+                "spot_price" : price["price"],
+                "spot_market" : price["market"],
+                "cum_7_day" : target.cum_7_day,
+                "cum_30_day" : target.cum_30_day
+            }
+            socketio.emit('arbitrage_data', data)
+    except AttributeError:
+        pass
+
+def listen_to_database():
+    listen(Price, 'after_update', spot_price_emission)
+    listen(Price, 'after_insert', spot_price_emission)
+    listen(PerpetualPrice, 'after_update', futures_price_emission)
+    listen(PerpetualPrice, 'after_insert', futures_price_emission)
 
 def balance_sync_background():
     ENDPOINT = "https://api.binance.com/sapi/v3/asset/getUserAsset"
@@ -61,9 +98,9 @@ def balance_sync_background():
             value = 0 if not response.text.isdigit() else int(response.text)
             user_asset[asset] = value
         socketio.emit('user_balance', user_asset)
-        time.sleep(15)
+        time.sleep(30)
 
 @socketio.on('connect')
 def handle_connection():
-    socketio.start_background_task(background_thread)
+    # socketio.start_background_task(background_thread)
     socketio.start_background_task(balance_sync_background)

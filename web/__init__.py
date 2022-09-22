@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
 from flask_bootstrap import Bootstrap
-import sqlalchemy as sa
+from sqlalchemy.event.api import listen
 load_dotenv()
 
 app = Flask(__name__)
@@ -22,3 +22,4 @@ socketio = SocketIO(app, async_mode="threading")
 from web.exchanges import CoreData
 core_data = CoreData()
 from web import routes
+routes.listen_to_database()

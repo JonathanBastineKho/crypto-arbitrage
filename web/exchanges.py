@@ -1,77 +1,101 @@
-from websocket import WebSocketApp
+from concurrent.futures import thread
+from sqlite3 import OperationalError
+import websockets
+import asyncio
 from abc import abstractmethod
 from sqlalchemy_utils import database_exists
 import json
-import requests, os
+import os
 import threading
 import time
+import queue
+import requests
 from web import DATABASE_URL, datab
 from web.db import Markets, Coins, Price, PerpetualPrice
 
 # ------------- Exchange Class -----------------
 
-class Exchange(WebSocketApp):
-    socket_message = None
+class Exchange:
     def __init__(self, market_name, market_stream):
+        self.queue = queue.Queue()
         sesh = datab.session()
         self.market_stream = market_stream
         self.market = sesh.query(Markets).filter_by(name=market_name).first()
         if self.market == None:
             new_market = Markets(name=market_name)
             sesh.add(new_market)
-            sesh.commit()
-            sesh.close()
+            self.safe_commit(sesh)
             self.market = new_market
-        super().__init__(self.market_stream,
-                         on_open= lambda self : self._on_openfcn(),
-                         on_message= lambda self, message : self._on_messagefcn(message),
-                         on_error= lambda self, error : self._on_errorfcn(error),
-                         on_close= lambda self : self._on_closefcn()
-                        )
-        exchange_socket = threading.Thread(target=self.run_forever)
-        exchange_socket.start()
+            
+        t = threading.Thread(target=self.between_callback)
+        t.start()
+
+    async def listen(self):
+        async with websockets.connect(self.market_stream) as ws:
+            await self._on_open_fcn(ws)
+            while True:
+                msg = json.loads(await ws.recv())
+                await self._on_messagefcn(ws, msg)
+
+    def safe_commit(self, sess):
+        while True:
+            try:
+                sess.commit()
+                sess.close()
+                break
+            except OperationalError:
+                continue
+
+    def between_callback(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        loop.run_until_complete(self.listen())
+        loop.close()
 
     @abstractmethod
-    def _on_messagefcn(self, message):
+    def _on_messagefcn(self, ws, message):
         pass
-
-    @staticmethod
-    def _on_errorfcn(error):
-        Exchange.socket_message = error
-
-    @staticmethod
-    def _on_closefcn():
-        Exchange.socket_message = "Error"
-
-    @staticmethod
-    def _on_openfcn():
-        Exchange.socket_message = "connection opened"
+    
+    async def _on_open_fcn(self, ws):
+        pass
+    
+    def _add_to_database(self):
+        while True:
+            data = self.queue.get()
+            sesh = datab.session()
+            coin = sesh.query(Coins).filter_by(name=data["coin"]).first()
+            if coin != None:
+                price = sesh.query(Price).filter_by(coin_id=coin.id, market_id=data["market_id"]).first()
+                if price != None:
+                    price.bid = data["bid"]
+                    price.ask = data["ask"]
+                else:
+                    sesh.add(Price(coin_id=coin.id,
+                                        market_id=data["market_id"],
+                                        bid=data["bid"],
+                                        ask=data["ask"]))
+            else:
+                sesh.add(Coins(name=data["coin"]))
+            self.safe_commit(sesh)
 
 # All available MarketPlace
-
 class Binance(Exchange):
     def __init__(self):
         super().__init__("binance", "wss://stream.binance.com:9443/ws/!bookTicker")
         
-    def _on_messagefcn(self, message):
-        data = json.loads(message)
-        sesh = datab.session()
-        coin = sesh.query(Coins).filter_by(name=data["s"]).first()
-        if coin != None:
-            price = sesh.query(Price).filter_by(coin_id=coin.id, market_id=self.market.id).first()
-            if price != None:
-                price.bid = data["b"]
-                price.ask = data["a"]
-            else:
-                sesh.add(Price(coin_id=coin.id, market_id=self.market.id, bid=data["b"], ask=data["a"]))
-        else:
-            sesh.add(Coins(name=data["s"]))
-        
-        sesh.commit()
-        sesh.close()
+    async def _on_messagefcn(self, ws, data):
+        self.queue.put({"coin" : data["s"],
+                        "market_id" : self.market.id,
+                        "bid" : data["b"],
+                        "ask" : data["a"]})
 
 class CryptoCom(Exchange):
     def __init__(self):
+        super().__init__("crypto_com", "wss://stream.crypto.com/v2/market")
+
+    async def _on_open_fcn(self, ws):
+        time.sleep(1)
         request = {
             "id": 11,
             "method": "subscribe",
@@ -79,35 +103,45 @@ class CryptoCom(Exchange):
                 "channels": ["ticker"]
             },
         }
-        super().__init__("crypto_com", "wss://stream.crypto.com/v2/market")
-        time.sleep(1)
-        self.send(json.dumps(request))
+        await ws.send(json.dumps(request))
 
-    def _on_messagefcn(self, message):
-        data = json.loads(message)
-        sesh = datab.session()
-        instrument_name = data["result"]["instrument_name"].replace("_", "")
-        coin = sesh.query(Coins).filter_by(name=instrument_name).first()
-        if coin != None:
-            price = sesh.query(Price).filter_by(coin_id=coin.id, market_id = self.market.id).first()
-            if price != None:
-                price.bid = data["result"]["data"][0]["b"]
-                price.ask = data["result"]["data"][0]["k"]
-            else:
-                sesh.add(Price(coin_id=coin.id,
-                                    market_id=self.market.id,
-                                    bid=data["result"]["data"][0]["b"],
-                                    ask=data["result"]["data"][0]["k"]))
-        else:
-            sesh.add(Coins(name=instrument_name))
-        sesh.commit()
-        sesh.close()
+    async def _on_messagefcn(self, ws, data):
+        if "method" in data and data["method"] == "public/heartbeat":
+            await ws.send(json.dumps({
+                "id" : data["id"],
+                "method" : "public/respond-heartbeat",
+                }))
+        elif "result" in data:
+            self.queue.put({"coin" : data["result"]["instrument_name"].replace("_", ""),
+                            "market_id" : self.market.id,
+                            "bid" : data["result"]["data"][0]["b"],
+                            "ask" : data["result"]["data"][0]["k"]})
+            
 
 # ----------------- FUTURES -------------------------------------
 class FuturesMixin:
-    def _sync_funding_rate(self, url, market_id, interval):
-        sess = datab.session()
+    def _add_to_database(self):
         while True:
+            sesh = datab.session()
+            data = self.queue.get()
+            coin = sesh.query(Coins).filter_by(name=data["coin"]).first()
+            if coin != None:
+                price = sesh.query(PerpetualPrice).filter_by(coin_id=coin.id, market_id=self.market.id).first()
+                if price != None:
+                    price.price = float(data["price"])
+                    price.funding_rate = float(data["funding_rate"])
+                else:
+                    sesh.add(PerpetualPrice(coin_id=coin.id,
+                                                market_id=self.market.id,
+                                                price=float(float(data["price"])),
+                                                funding_rate=float(data["funding_rate"])))
+            else:
+                sesh.add(Coins(name=data['coin']))
+            self.safe_commit(sesh)
+
+    def _sync_funding_rate(self, url, market_id, interval):
+        while True:
+            sess = datab.session()
             perp_price = sess.query(PerpetualPrice).all()
             for price in perp_price:
                 price = sess.query(PerpetualPrice).filter_by(coin_id=price.coin_id, market_id=market_id).first()
@@ -115,39 +149,25 @@ class FuturesMixin:
                 data = json.loads(requests.get(url, params={"symbol" : str(coin_name)}).text)
                 price.cum_7_day = sum([float(i["fundingRate"]) for i in data[-21:0:-1]])
                 price.cum_30_day = sum([float(i["fundingRate"]) for i in data[-90:0:-1]])
-            sess.commit()
+            self.safe_commit(sess)
             time.sleep(interval)
             
 
-class BinanceFutures(Exchange, FuturesMixin):
+class BinanceFutures(FuturesMixin, Exchange):
     url = "https://fapi.binance.com/fapi/v1/fundingRate"
     INTERVAL = 8*3600
     def __init__(self):
         super().__init__("binance_futures", "wss://fstream.binance.com/ws/!markPrice@arr@1s")
         threading.Thread(target=self._sync_funding_rate, args=(BinanceFutures.url, self.market.id, BinanceFutures.INTERVAL)).start()
 
-    def _on_messagefcn(self, message):
-        data = json.loads(message)
-        sesh = datab.session()
+    async def _on_messagefcn(self, ws, data):
         for i in range(len(data)):
-            coin = sesh.query(Coins).filter_by(name=data[i]['s']).first()
-            if coin != None:
-                price = sesh.query(PerpetualPrice).filter_by(coin_id=coin.id, market_id=self.market.id).first()
-                if price != None:
-                    price.price = float(data[i]['p'])
-                    price.funding_rate = float(data[i]['r'])
-                else:
-                    sesh.add(PerpetualPrice(coin_id=coin.id,
-                                                  market_id=self.market.id,
-                                                  price=float(data[i]['p']),
-                                                  funding_rate=float(data[i]['r'])))
-            else:
-                sesh.add(Coins(name=data[i]['s']))
-        sesh.commit()
-        sesh.close()
+            self.queue.put({"coin" : data[i]['s'],
+                            "market_id" : self.market.id,
+                            "price" : data[i]["p"],
+                            "funding_rate" : data[i]["r"]})
 
 # ------------- Core Data Class -----------------
-
 class CoreData:
     def __init__(self) -> None:
         self.status = "online"
@@ -161,8 +181,9 @@ class CoreData:
     def _initialize(self):
         try:
             for cls in Exchange.__subclasses__():
-                cls()
-        except:
+                obj = cls()
+                threading.Thread(target=obj._add_to_database).start()
+        except Exception:
             print("try running the app again")
             os._exit(0)
 
@@ -178,13 +199,19 @@ class CoreData:
         all_futures_data = sess.query(PerpetualPrice).all()
         return all_price, all_futures_data
     
-    def search_spot_data(self, coin_name:str, sess):
-        # Coin Search
-        coin = sess.query(Coins).filter_by(name=coin_name).first()
-        if coin != None:
-            spot = sess.query(Price).filter_by(coin_id=coin.id).first()
-            return spot
-        return None
+    def search_spot_data(self, coin_name:str):
+        sess = datab.session()
+        while True:
+            try:
+                coin = sess.query(Coins).filter_by(name=coin_name).first()
+                if coin != None:
+                    spot = sess.query(Price).filter_by(coin_id=coin.id).all()
+                    lst = []
+                    for i in spot:
+                        lst.append({"price" : i.ask, "market" : i.market.name})
+                    return lst
+            except OperationalError:
+                continue
 
     def get_all_potential_arbitrage(self, sess, percentage_diff=0.05):
         data = []
