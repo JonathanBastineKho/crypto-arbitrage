@@ -1,5 +1,5 @@
 from concurrent.futures import thread
-from sqlite3 import DatabaseError, OperationalError
+from sqlite3 import OperationalError
 import websockets
 import asyncio
 from abc import abstractmethod
@@ -179,7 +179,7 @@ class CoreData:
 ----------DISCLAIMER----------
 Since Database Has just been created, you might need to restart
 the app a 2-3 times because there's a lot of data inserted into
-the database and might cause some SQLite database lock.
+the database at first and might cause some SQLite database lock.
 ----------DISCLAIMER----------
 """)
             self.status = "restart"
