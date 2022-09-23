@@ -48,8 +48,8 @@ def spot_price_emission(mapper, connection, target):
         data = {
             "coin" : target.coin.name,
             "market" : target.market.name,
-            "bid" : target.bid,
-            "ask" : target.ask
+            "bid" : float(target.bid),
+            "ask" : float(target.ask)
         }
         socketio.emit('spot_data', data)
     except AttributeError:
@@ -61,13 +61,13 @@ def futures_price_emission(mapper, connection, target):
         for price in spot_prices:
             data = {
                 "coin" : target.coin.name,
-                "futures_price" : target.price,
+                "futures_price" : float(target.price),
                 "futures_market" : target.market.name,
-                "funding_rate" : target.funding_rate,
-                "spot_price" : price["price"],
+                "funding_rate" : float(target.funding_rate),
+                "spot_price" : float(price["price"]),
                 "spot_market" : price["market"],
-                "cum_7_day" : target.cum_7_day,
-                "cum_30_day" : target.cum_30_day
+                "cum_7_day" : float(target.cum_7_day) if target.cum_7_day != None else 0,
+                "cum_30_day" : float(target.cum_30_day) if target.cum_30_day != None else 0,
             }
             socketio.emit('arbitrage_data', data)
     except AttributeError:

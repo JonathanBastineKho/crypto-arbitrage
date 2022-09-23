@@ -1,5 +1,5 @@
 from concurrent.futures import thread
-from sqlite3 import OperationalError
+from sqlite3 import DatabaseError, OperationalError
 import websockets
 import asyncio
 from abc import abstractmethod
@@ -44,7 +44,7 @@ class Exchange:
                 sess.close()
                 break
             except OperationalError:
-                continue
+                sess.rollback()
 
     def between_callback(self):
         loop = asyncio.new_event_loop()
@@ -140,6 +140,7 @@ class FuturesMixin:
             self.safe_commit(sesh)
 
     def _sync_funding_rate(self, url, market_id, interval):
+        time.sleep(10)
         while True:
             sess = datab.session()
             perp_price = sess.query(PerpetualPrice).all()
@@ -174,8 +175,14 @@ class CoreData:
         if not database_exists(DATABASE_URL.replace("../", "")):
             datab.create_all()
             print("Database has just been created")
+            print("""
+----------DISCLAIMER----------
+Since Database Has just been created, you might need to restart
+the app a 2-3 times because there's a lot of data inserted into
+the database and might cause some SQLite database lock.
+----------DISCLAIMER----------
+""")
             self.status = "restart"
-        
         self._initialize()
 
     def _initialize(self):
@@ -184,7 +191,6 @@ class CoreData:
                 obj = cls()
                 threading.Thread(target=obj._add_to_database).start()
         except Exception:
-            print("try running the app again")
             os._exit(0)
 
     def get_all_spot_data(self, sess):
