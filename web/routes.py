@@ -16,33 +16,10 @@ def index():
 def potential_arbitrage():
     return render_template("spot_futures_arbitrage.html", title="Spot - Futures Arbitrage", _get_balance=jsonify({"test":"test"}))
 
-def background_thread():
-    sess = datab.session()
-    while True:
-        prices = core_data.get_all_spot_data(sess=sess)
-        futures = core_data.get_all_futures_data(sess=sess)
-        for i in range(len(prices)):
-            data = {
-                "coin" : prices[i].coin.name,
-                "market" : prices[i].market.name,
-                "bid" : prices[i].bid,
-                "ask" : prices[i].ask,
-            }
-            socketio.emit('spot_data', data)
-        for ft_price in futures:
-            coin_name = ft_price.coin.name
-            spot = core_data.search_spot_data(coin_name=coin_name,  sess=sess)
-            if spot != None:
-                data = {
-                    "coin" : coin_name,
-                    "futures_price" : ft_price.price,
-                    "spot_price" : spot.ask,
-                    "futures_market" : ft_price.market.name,
-                    "spot_market" : spot.market.name,
-                    "funding_rate" : ft_price.funding_rate,
-                }
-                socketio.emit('arbitrage_data', data)
-        time.sleep(0.1)
+@app.route("/test/<market>/<ticker>")
+def test(market, ticker):
+    return jsonify(core_data.get_all_funding_rate(market, ticker))
+
 def spot_price_emission(mapper, connection, target):
     try:
         data = {
@@ -102,5 +79,4 @@ def balance_sync_background():
 
 @socketio.on('connect')
 def handle_connection():
-    # socketio.start_background_task(background_thread)
     socketio.start_background_task(balance_sync_background)

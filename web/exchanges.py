@@ -155,11 +155,11 @@ class FuturesMixin:
             
 
 class BinanceFutures(FuturesMixin, Exchange):
-    url = "https://fapi.binance.com/fapi/v1/fundingRate"
-    INTERVAL = 8*3600
     def __init__(self):
+        self.url = "https://fapi.binance.com/fapi/v1/fundingRate"
+        self.INTERVAL = 8*3600
         super().__init__("binance_futures", "wss://fstream.binance.com/ws/!markPrice@arr@1s")
-        threading.Thread(target=self._sync_funding_rate, args=(BinanceFutures.url, self.market.id, BinanceFutures.INTERVAL)).start()
+        threading.Thread(target=self._sync_funding_rate, args=(self.url, self.market.id, self.INTERVAL)).start()
 
     async def _on_messagefcn(self, ws, data):
         for i in range(len(data)):
@@ -172,16 +172,17 @@ class BinanceFutures(FuturesMixin, Exchange):
 class CoreData:
     def __init__(self) -> None:
         self.status = "online"
+        self.exchanges = []
         if not database_exists(DATABASE_URL.replace("../", "")):
             datab.create_all()
             print("Database has just been created")
             print("""
-----------DISCLAIMER----------
-Since Database Has just been created, you might need to restart
-the app a 2-3 times because there's a lot of data inserted into
-the database at first and might cause some SQLite database lock.
-----------DISCLAIMER----------
-""")
+            ----------DISCLAIMER----------
+            Since Database Has just been created, you might need to restart
+            the app a 2-3 times because there's a lot of data inserted into
+            the sqlite at first and might cause some SQLite database lock.
+            ----------DISCLAIMER----------
+            """)
             self.status = "restart"
         self._initialize()
 
@@ -189,6 +190,7 @@ the database at first and might cause some SQLite database lock.
         try:
             for cls in Exchange.__subclasses__():
                 obj = cls()
+                self.exchanges.append(obj)
                 threading.Thread(target=obj._add_to_database).start()
         except Exception:
             os._exit(0)
@@ -241,3 +243,9 @@ the database at first and might cause some SQLite database lock.
 
             data.append(dict)
         return data
+    
+    def get_all_funding_rate(self, market_name, ticker):
+        for exchange in self.exchanges:
+            if exchange.market.name == market_name:
+                data = json.loads(requests.get(exchange.url, params={"symbol" : str(ticker)}).text)
+                return [float(i["fundingRate"]) for i in data]
