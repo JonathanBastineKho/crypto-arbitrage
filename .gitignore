@@ -4,3 +4,5 @@ market_place.db
 __pycache__
 market_place.db-journal
 web/test.py
+.vscode\settings.json
+user.db

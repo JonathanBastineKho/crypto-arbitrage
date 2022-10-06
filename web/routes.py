@@ -1,20 +1,66 @@
+from cmath import log
 from web import app, socketio, core_data, BINANCE_API_KEY, BINANCE_PRIVATE_KEY, datab
-from flask import render_template, jsonify
+from flask import render_template, jsonify, request, flash, redirect, url_for
 import time
 import hmac
 import requests
 import hashlib
 from urllib.parse import urlencode
 from sqlalchemy.event.api import listen
-from web.db import Price, PerpetualPrice
+from flask_login import login_user, login_required, current_user, logout_user
+from web import login_manager, bcrypt
+from web.db import Price, PerpetualPrice, User
 
-@app.route("/")
-def index():
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(user_id)
+
+@app.route("/spot-arbitrage")
+def spot_arbitrage():
     return render_template("index.html", title="Spot - Spot Arbitrage")
 
-@app.route("/spot-futures-arbitrage")
-def potential_arbitrage():
-    return render_template("spot_futures_arbitrage.html", title="Spot - Futures Arbitrage", _get_balance=jsonify({"test":"test"}))
+@app.route("/")
+def futures_arbitrage():
+    return render_template("spot_futures_arbitrage.html", title="Spot - Futures Arbitrage")
+
+@app.route("/logout")
+def logout():
+    logout_user()
+    return redirect(url_for('futures_arbitrage'))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        email = request.form["email"]
+        username = request.form["username"]
+        if User.query.filter_by(email=email).first() == None and User.query.filter_by(username=username).first() == None:
+            user = User(username=username,
+            email=email, 
+            password=bcrypt.generate_password_hash(request.form["password"], 13, prefix=b"2b"))
+            datab.session.add(user)
+            datab.session.commit()
+            login_user(user)
+            return redirect(url_for('futures_arbitrage'))
+        elif User.query.filter_by(email=email).first() != None:
+            flash("You already create this email")
+        elif User.query.filter_by(username=username).first() != None:
+            flash("You already create this username")
+        return redirect(url_for('login'))
+    return render_template("register.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == 'POST':
+        print("executed")
+        user = User.query.filter_by(username=request.form["username"]).first()
+        if user != None and bcrypt.check_password_hash(pw_hash=user.password, password=request.form["username"]):
+            login_user(user)
+            return redirect(url_for('futures_arbitrage'))
+        else:
+            flash("username/email or password doesn't match")
+            return redirect(url_for('login'))
+
+    return render_template("login.html")
 
 @app.route("/test/<market>/<ticker>")
 def test(market, ticker):
@@ -55,28 +101,3 @@ def listen_to_database():
     listen(Price, 'after_insert', spot_price_emission)
     listen(PerpetualPrice, 'after_update', futures_price_emission)
     listen(PerpetualPrice, 'after_insert', futures_price_emission)
-
-def balance_sync_background():
-    ENDPOINT = "https://api.binance.com/sapi/v3/asset/getUserAsset"
-    assets = ["USDT", "USD", "BUSD"]
-    headers = {"X-MBX-APIKEY" : BINANCE_API_KEY}
-    while True:
-        user_asset = {}
-        for asset in assets:
-            params = {
-                "timestamp" : int(time.time()*1000) - 1000,
-                "asset" : asset
-            }
-            query_string = urlencode(params)
-            params['signature'] = hmac.new(BINANCE_PRIVATE_KEY.encode('utf-8'), 
-                                        query_string.encode('utf-8'), 
-                                        hashlib.sha256).hexdigest()
-            response = requests.post(ENDPOINT, headers=headers, params=params)
-            value = 0 if not response.text.isdigit() else int(response.text)
-            user_asset[asset] = value
-        socketio.emit('user_balance', user_asset)
-        time.sleep(30)
-
-@socketio.on('connect')
-def handle_connection():
-    socketio.start_background_task(balance_sync_background)

@@ -10,7 +10,7 @@ import threading
 import time
 import queue
 import requests
-from web import DATABASE_URL, datab
+from web import DATABASE_URL, DATABASE_URL_USER, datab
 from web.db import Markets, Coins, Price, PerpetualPrice
 
 # ------------- Exchange Class -----------------
@@ -173,7 +173,7 @@ class CoreData:
     def __init__(self) -> None:
         self.status = "online"
         self.exchanges = []
-        if not database_exists(DATABASE_URL.replace("../", "")):
+        if not (database_exists(DATABASE_URL.replace("../", "")) and database_exists(DATABASE_URL_USER.replace("../", ""))):
             datab.create_all()
             print("Database has just been created")
             print("""
@@ -192,7 +192,8 @@ class CoreData:
                 obj = cls()
                 self.exchanges.append(obj)
                 threading.Thread(target=obj._add_to_database).start()
-        except Exception:
+        except Exception as e:
+            print(e)
             os._exit(0)
 
     def get_all_spot_data(self, sess):
